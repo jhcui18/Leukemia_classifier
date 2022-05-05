@@ -1,0 +1,231 @@
+---
+title: "Final Project"
+author: "Xinyang Liu"
+date: "4/25/2022"
+output:   
+  pdf_document:
+    number_sections: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(tidyverse)
+```
+
+**Molecular classification of cancer: a PCA approach**
+
+Xinyang Liu, Jinghan Cui
+
+*Introduction*
+
+A lot of studies have proved that cancer classification based on gene expression is valid and many of them used clustering and dimensionality reduction techniques. Here we want to adopt a multivariate analysis approach, principal component analysis (PCA) because we can not only use it to project the data points to a few principal components but also to find out which gene expression plays the most important role in classifying the cancers by analyzing the marginal correlation. 
+
+*Dataset* 
+The datasets we used are from a study published in 1999 by Golub et al. The dataset consists of quantitative expression levels of 7192 genes from 72 acute leukemia patients’ Bone marrow and Peripheral blood samples. The patients are labeled with Acute myeloid leukemia(AML) and Acute lymphoblastic leukemia(ALL) from previous clinical diagnoses. 
+
+*Research question*
+
+Which gene expression is most related to the classification of Acute myeloid leukemia and acute lymphoblastic leukemia?
+
+*Method*
+
+We will use Principal Component Analysis for dimension reduction. Then we use the principal components to classify the types of leukemia. Comparing the accuracies of classification with different numbers of components, we pick the model with the best balance of sensitivity and specificity. Next, we calculate the bootstrap confidence interval for each component along with the z-score confidence interval and find the significant one. We then analyze the components using marginal correlation to figure out which gene expression is most related to the classification of the two types of leukemia.
+
+*Contribution*
+All authors contributed equally to each part of the project including data analysis, writing, and presenting.
+
+*Reference*
+
+Golub, T. R., et al. “Molecular Classification of Cancer: Class Discovery and Class Prediction by Gene Expression Monitoring.” Science, vol. 286, no. 5439, 1999, pp. 531–37, http://www.jstor.org/stable/2899325. Accessed 1 May 2022.
+
+```{r}
+#data cleaning 
+rm(list = ls())
+df1 <- read.csv("data_set_ALL_AML_train.csv")
+df2 <- read.csv("data_set_ALL_AML_independent.csv")
+label <- read.csv("actual.csv")
+df <- cbind(df1,df2)
+# extract patients columns
+col_extract <- character(0)
+for(i in 1:ncol(df)) {
+  if(lngth(grep("X",colnames(df)[i]))>0) col_extract <- append(col_extract, colnames(df)[i])
+}
+df <- df[,col_extract]
+rownames(df) <- df1[,2]
+df <- t(df)
+n <- nrow(df)
+p <- ncol(df)
+
+# extract patient ID from row names and sort data by ID
+ID <- numeric(n)
+for(i in 1:n) ID[i] <- as.numeric(gsub("X","",rownames(df)[i]))
+df <- data.frame(cbind(ID, df))
+df <- df %>% arrange(ID)
+X <- df[,-1]
+Z <- label$cancer
+```
+
+```{r,eval = FALSE}
+#the covariance matrix and eigen vector calculation take around 5-10 minutes to run.
+#to save time for knitting the file we save the output for future use.
+#this chunk will not be ran when kniting the file
+#to re-calculate the two outputs, remove "eval=FALSE" and run this chunk
+scaled_X <- scale(X)
+S <- cov(scaled_X)
+eig <- eigen(S)
+cum_prop <- cumsum(eig$values/sum(eig$values))
+#save output
+saveRDS(S,"cov_matrix.rds")
+saveRDS(eig,"eigen.rds")
+```
+
+```{r}
+S <- readRDS("cov_matrix.rds")
+eig <- readRDS("eigen.rds")
+```
+
+
+```{r}
+# scree plot
+plot(1:40, eig$values[1:40], type = "b", pch = 19,
+     xlab = "i", ylab = expression(hat(lambda)), main = "Scree plot") 
+
+plot(1:p, cum_prop, type = "l", pch = 19,
+     xlab = "i", ylab = "cumulative proportion of variance", main = "") 
+abline(a = 0.9, b = 0, lty = 20)
+
+```
+
+```{r}
+k=6
+print(k)
+Xk <- as.matrix(X) %*% eigR$vectors[,c(1:6,8:10 )]
+fit1 <- glm(as.factor(Z) ~ Xk, family = "binomial")
+summary(fit1)
+
+#accuracy
+library(caret)
+set.seed(1234)
+#split 2/3 data to train and 1/3 to test
+trainIndex <- createDataPartition(Z, p=0.67,
+                                  list = FALSE,
+                                  times =1)
+Z_binary <- ifelse(Z=="ALL",1,0)
+
+#run logistic regression from 1 to 10 components
+k_seq <- 1:10
+all_fit <- list()
+tbl_accuracy <- data.frame(k = rep(NA_real_,length(k_seq)),
+                           accuracy = NA_real_)
+                       
+for(i in 1:length(k_seq)) {
+  k <- k_seq[i]
+  print(k)
+  tbl_accuracy$k[i] <- k
+  Xk <- as.matrix(scaled_X) %*% eig$vectors[, 1:k] #principal components
+  data <- as.data.frame(cbind(Xk,Z_binary))
+  Train <- data[trainIndex,]
+  Test <- data[-trainIndex,]
+  fit <- glm(as.factor(Z_binary) ~ ., data=Train, family = "binomial") #logistic regression
+  #all_fit[[i]] <- fit
+  #calculate acccuracy of classification
+  Test$model_prob <- predict(fit, newdata=Test, type = "response")
+  Test <- Test  %>% mutate(model_pred = 1*(model_prob > .5) + 0)
+  Test <- Test %>% mutate(accurate = 1*(model_pred == Z_binary))
+  tbl_accuracy$accuracy[i] <- sum(Test$accurate)/nrow(Test) 
+}
+
+#plot accuracy with number of components
+ggplot(data=tbl_accuracy, aes(x=k, y=accuracy)) +
+  geom_point() +
+  geom_line()
+```
+
+```{r}
+#boostrap confidence interval
+Xk_boot <- as.matrix(scaled_X) %*% eig$vectors[, 1:2] #principal components
+data_boot <- as.data.frame(cbind(Xk_boot,Z_binary))
+# Containers for the coefficients
+sample_coef_intercept <- NULL
+sample_coef_x1 <- NULL
+sample_coef_x2 <- NULL
+
+for (i in 1:1000) {
+  #Creating a resampled dataset from the sample data
+  sample_d = data_boot[sample(1:nrow(data_boot), nrow(data_boot), replace = TRUE), ]
+  
+  #Running the regression on these data
+  model_bootstrap <- glm(as.factor(Z_binary) ~ ., data=sample_d, family = "binomial") #logistic regression
+  
+  #Saving the coefficients
+  sample_coef_intercept <-
+    c(sample_coef_intercept, model_bootstrap$coefficients[1])
+  
+  sample_coef_x1 <-
+    c(sample_coef_x1, model_bootstrap$coefficients[2])
+  
+  sample_coef_x2 <-
+    c(sample_coef_x2, model_bootstrap$coefficients[3])
+}
+
+a <-
+  cbind(
+    quantile(sample_coef_intercept, prob = 0.025),
+    quantile(sample_coef_intercept, prob = 0.975))
+b <-
+  cbind(quantile(sample_coef_x1, prob = 0.025),
+        quantile(sample_coef_x1, prob = 0.975))
+c <-
+  cbind(quantile(sample_coef_x2, prob = 0.025),
+        quantile(sample_coef_x2, prob = 0.975))
+
+c <-
+  round(cbind(
+    population = confint(population.model),
+    sample = confint(sample.model),
+    boot = rbind(a, b)), 4)
+colnames(c) <- c("2.5 %", "97.5 %",
+                 "2.5 %", "97.5 %",
+                 "2.5 %", "97.5 %")
+knitr::kable(rbind(
+  c('population',
+    'population',
+    'sample',
+    'sample',
+    'bootstrap',
+    'bootstrap'),c))
+```
+
+
+```{r,include=FALSE}
+# number of principal components
+k_seq <- 4:20
+all_fit <- list()
+for(i in 1:length(k_seq)) {
+  k <- k_seq[i]
+  print(k)
+  Xk <- as.matrix(X) %*% eig$vectors[, 1:k]
+  all_fit[[i]] <- glm(as.factor(Z) ~ Xk, family = "binomial")
+}
+
+```
+
+
+```{r}
+#PCA with correlation matrix
+R <- cor(X)
+eigR <- eigen(R)
+cum_propR <- cumsum(eigR$values/sum(eigR$values))
+
+plot(1:40, eigR$values[1:40], type = "b", pch = 19,
+     xlab = "i", ylab = expression(hat(lambda)), main = "Scree plot") # scree plot
+
+plot(1:p, cum_propR, type = "l", pch = 19,
+     xlab = "i", ylab = "cumulative proportion of variance", main = "") 
+abline(a = 0.9, b = 0, lty = 20)
+```
+
+
+
+
+
