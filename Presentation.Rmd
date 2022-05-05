@@ -1,0 +1,37 @@
+---
+title: "Molecular classification of cancer: a PCA approach"
+author: "Xinyang Liu, Jinghan Cui"
+date: "5/5/2022"
+output: beamer_presentation
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = FALSE)
+```
+
+## Motivation
+
+
+## Data
+
+- The dataset consists of quantitative expression levels of 7192 genes from 72 acute leukemia patients.
+- The patients are labeled with Acute myeloid leukemia(AML) and Acute lymphoblastic leukemia(ALL) from previous clinical diagnoses. 
+
+## Slide with Bullets
+
+- Bullet 1
+- Bullet 2
+- Bullet 3
+
+## Slide with R Output
+
+```{r cars, echo = TRUE}
+summary(cars)
+```
+
+## Slide with Plot
+
+```{r pressure}
+plot(pressure)
+```
+
