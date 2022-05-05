@@ -11,6 +11,7 @@ output:
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 library(ggplot2)
+library(dplyr)
 ```
 
 
@@ -40,6 +41,10 @@ All authors contributed equally to each part of the project including data analy
 
 Golub, T. R., et al. “Molecular Classification of Cancer: Class Discovery and Class Prediction by Gene Expression Monitoring.” Science, vol. 286, no. 5439, 1999, pp. 531–37, http://www.jstor.org/stable/2899325. Accessed 1 May 2022.
 
+## Data analysis
+
+First we did a data cleaning and since the gene expressions ranges differently, we did a standardization.
+
 ```{r}
 #data cleaning 
 rm(list = ls())
@@ -54,6 +59,7 @@ for(i in 1:ncol(df)) {
 }
 df <- df[,col_extract]
 rownames(df) <- df1[,2]
+gene_name <- df1[,1]
 df <- t(df)
 n <- nrow(df)
 p <- ncol(df)
@@ -65,18 +71,19 @@ df <- data.frame(cbind(ID, df))
 df <- df %>% arrange(ID)
 X <- df[,-1]
 Z <- label$cancer
+
+scaled_X <- scale(X)
 ```
 
-
+Next, we calculate the covariance matrix, eigenvalues and eigenvector.
 ```{r,eval = FALSE}
 #the covariance matrix and eigen vector calculation take around 5-10 minutes to run.
 #to save time for knitting the file we save the output for future use.
 #this chunk will not be ran when kniting the file
 #to re-calculate the two outputs, remove "eval=FALSE" and run this chunk
-scaled_X <- scale(X)
 S <- cov(scaled_X)
 eig <- eigen(S)
-cum_prop <- cumsum(eig$values/sum(eig$values))
+
 #save output
 saveRDS(S,"cov_matrix.rds")
 saveRDS(eig,"eigen.rds")
@@ -85,9 +92,11 @@ saveRDS(eig,"eigen.rds")
 ```{r}
 S <- readRDS("cov_matrix.rds")
 eig <- readRDS("eigen.rds")
+cum_prop <- cumsum(eig$values/sum(eig$values))
+cum_prop[1:100]
 ```
 
-
+From the cumulative variance and scree plot, we found 70 components can explain 99% of the covariance. 
 ```{r}
 # scree plot
 plot(1:40, eig$values[1:40], type = "b", pch = 19,
@@ -99,10 +108,11 @@ abline(a = 0.9, b = 0, lty = 20)
 
 ```
 
+Due to the limitation of computing power, we decided to run logistic regression for 1 to 10 component. 10 component can explain approximate 50% of the variance.
 
+The data is splited into train and test dataset at a ratio of 1:2. The accuracy of classification in the test dataset is calculated.
 
-```{r}
-
+```{r, warning=FALSE}
 #accuracy
 library(caret)
 set.seed(1234)
@@ -111,7 +121,7 @@ trainIndex <- createDataPartition(Z, p=0.67,
                                   list = FALSE,
                                   times =1)
 Z_binary <- ifelse(Z=="ALL",1,0)
-
+table(Z[trainIndex])
 #run logistic regression from 1 to 10 components
 k_seq <- 1:10
 all_fit <- list()
@@ -138,8 +148,13 @@ for(i in 1:length(k_seq)) {
 #plot accuracy with number of components
 ggplot(data=tbl_accuracy, aes(x=k, y=accuracy)) +
   geom_point() +
-  geom_line()
+  geom_line() +
+  labs(x="# of principal components")
 ```
+
+From the accuracy plot we can see the accuracy reaches 100% when we include 5 principal components to the model and then decreases as we include more components but increases again to 95% when we include 10 components. We think this unstable results may be caused by the small sample size because when we include more than 5 components to the model, the model can not converge.
+
+We chosed the model with three principal components as the 3-component model can converge and has an accuracy of 86%. This model should have a good balance between bias and variance. We want to run a bootstrap for this model and check whether the regression 95% confidence interval and the bootstrap 95% confidence interval agrees.
 
 ```{r,warning=FALSE}
 #boostrap confidence interval
@@ -203,41 +218,40 @@ knitr::kable(rbind(
     'bootstrap'),d))
 ```
 
-The second component has a 95% confidence interval that does not cross zero.
+Both the regression and boostrap confidence intervals agree that the first component is not significant and the second component is significantly negatively correlated with the outcome. While for the third component, the regression confidence interval shows it is positively correlated but the bootsrap confidence interval show it is negatively correlated. So we will further explore the second component.
+
+We want to look into it's marginal correlations to determine which gene expression contributes most to this component by calculating the marginal correlations.
 
 ```{r}
-
-```
-
-
-
-```{r,include=FALSE}
-# number of principal components
-k_seq <- 4:20
-all_fit <- list()
-for(i in 1:length(k_seq)) {
-  k <- k_seq[i]
-  print(k)
-  Xk <- as.matrix(X) %*% eig$vectors[, 1:k]
-  all_fit[[i]] <- glm(as.factor(Z) ~ Xk, family = "binomial")
+# Marginal correlations:
+marg_cor <- function(Sigma) {
+  eig <- eigen(Sigma)
+  # j =  {1,...,p} / X margin
+  # i = principle component
+  marg_cor_for_single_pc_single_margin <- function(j, i) { 
+    return(eig$vectors[j, i] * sqrt(eig$values[i]) / sqrt(Sigma[j, j]))
+  }
+  marg_cor_for_single_pc_all_margins <- function(i) {
+    return(sapply(1:nrow(Sigma), marg_cor_for_single_pc_single_margin, i = i))
+  }
+  res <- lapply(1:nrow(Sigma), marg_cor_for_single_pc_all_margins)
+  return(res)
 }
 
+marg_cor <- eig$vectors[,2]*sqrt(eig$values[2])
+marg_cor <-  data.frame(marg_cor)
+marg_cor <- marg_cor %>%
+  mutate(abs_cor = abs(marg_cor), name = gene_name) %>%
+  arrange(desc(abs_cor))
+marg_cor50 <- marg_cor[1:50,]
 ```
+
 
 
 ```{r}
-#PCA with correlation matrix
-R <- cor(X)
-eigR <- eigen(R)
-cum_propR <- cumsum(eigR$values/sum(eigR$values))
 
-plot(1:40, eigR$values[1:40], type = "b", pch = 19,
-     xlab = "i", ylab = expression(hat(lambda)), main = "Scree plot") # scree plot
-
-plot(1:p, cum_propR, type = "l", pch = 19,
-     xlab = "i", ylab = "cumulative proportion of variance", main = "") 
-abline(a = 0.9, b = 0, lty = 20)
 ```
+
 
 
 
