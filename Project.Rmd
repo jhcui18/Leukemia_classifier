@@ -35,6 +35,8 @@ All authors contributed equally to each part of the project including data analy
 
 Golub, T. R., et al. “Molecular Classification of Cancer: Class Discovery and Class Prediction by Gene Expression Monitoring.” Science, vol. 286, no. 5439, 1999, pp. 531–37, http://www.jstor.org/stable/2899325. Accessed 1 May 2022.
 
+Codes and lecture notes from UMass Amherst Spring 2022 STAT 697MV course by Professor Shai Gorsky.
+
 # Data analysis
 
 First we did a data cleaning and since the gene expressions ranges differently, we did a standardization.
