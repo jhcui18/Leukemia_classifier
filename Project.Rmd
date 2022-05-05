@@ -2,9 +2,13 @@
 title: "Final Project"
 author: "Xinyang Liu"
 date: "4/25/2022"
+<<<<<<< HEAD
 output:   
   pdf_document:
     number_sections: true
+=======
+output: html_document
+>>>>>>> eda54b1c711d96f58428884ca4f13d54f46f5184
 ---
 
 ```{r setup, include=FALSE}
@@ -12,6 +16,7 @@ knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
 ```
 
+<<<<<<< HEAD
 **Molecular classification of cancer: a PCA approach**
 
 Xinyang Liu, Jinghan Cui
@@ -40,6 +45,15 @@ Golub, T. R., et al. “Molecular Classification of Cancer: Class Discovery and 
 
 ```{r}
 #data cleaning 
+=======
+Reference
+
+Golub, T. R., et al. “Molecular Classification of Cancer: Class Discovery and Class Prediction by Gene Expression Monitoring.” Science, vol. 286, no. 5439, 1999, pp. 531–37, http://www.jstor.org/stable/2899325. Accessed 1 May 2022.
+
+Dataset is downloaded from: https://www.kaggle.com/datasets/crawford/gene-expression
+
+```{r}
+>>>>>>> eda54b1c711d96f58428884ca4f13d54f46f5184
 rm(list = ls())
 df1 <- read.csv("data_set_ALL_AML_train.csv")
 df2 <- read.csv("data_set_ALL_AML_independent.csv")
@@ -48,7 +62,11 @@ df <- cbind(df1,df2)
 # extract patients columns
 col_extract <- character(0)
 for(i in 1:ncol(df)) {
+<<<<<<< HEAD
   if(lngth(grep("X",colnames(df)[i]))>0) col_extract <- append(col_extract, colnames(df)[i])
+=======
+  if(length(grep("X",colnames(df)[i]))>0) col_extract <- append(col_extract, colnames(df)[i])
+>>>>>>> eda54b1c711d96f58428884ca4f13d54f46f5184
 }
 df <- df[,col_extract]
 rownames(df) <- df1[,2]
@@ -65,15 +83,20 @@ X <- df[,-1]
 Z <- label$cancer
 ```
 
+<<<<<<< HEAD
 ```{r,eval = FALSE}
 #the covariance matrix and eigen vector calculation take around 5-10 minutes to run.
 #to save time for knitting the file we save the output for future use.
 #this chunk will not be ran when kniting the file
 #to re-calculate the two outputs, remove "eval=FALSE" and run this chunk
+=======
+```{r}
+>>>>>>> eda54b1c711d96f58428884ca4f13d54f46f5184
 scaled_X <- scale(X)
 S <- cov(scaled_X)
 eig <- eigen(S)
 cum_prop <- cumsum(eig$values/sum(eig$values))
+<<<<<<< HEAD
 #save output
 saveRDS(S,"cov_matrix.rds")
 saveRDS(eig,"eigen.rds")
@@ -82,20 +105,30 @@ saveRDS(eig,"eigen.rds")
 ```{r}
 S <- readRDS("cov_matrix.rds")
 eig <- readRDS("eigen.rds")
+=======
+>>>>>>> eda54b1c711d96f58428884ca4f13d54f46f5184
 ```
 
 
 ```{r}
+<<<<<<< HEAD
 # scree plot
 plot(1:40, eig$values[1:40], type = "b", pch = 19,
      xlab = "i", ylab = expression(hat(lambda)), main = "Scree plot") 
+=======
+plot(1:40, eig$values[1:40], type = "b", pch = 19,
+     xlab = "i", ylab = expression(hat(lambda)), main = "Scree plot") # scree plot
+>>>>>>> eda54b1c711d96f58428884ca4f13d54f46f5184
 
 plot(1:p, cum_prop, type = "l", pch = 19,
      xlab = "i", ylab = "cumulative proportion of variance", main = "") 
 abline(a = 0.9, b = 0, lty = 20)
 
 ```
+<<<<<<< HEAD
 
+=======
+>>>>>>> eda54b1c711d96f58428884ca4f13d54f46f5184
 ```{r}
 k=6
 print(k)
@@ -126,7 +159,11 @@ for(i in 1:length(k_seq)) {
   data <- as.data.frame(cbind(Xk,Z_binary))
   Train <- data[trainIndex,]
   Test <- data[-trainIndex,]
+<<<<<<< HEAD
   fit <- glm(as.factor(Z_binary) ~ ., data=Train, family = "binomial") #logistic regression
+=======
+  fit <- glm(as.factor(Z_binary) ~ ., data=data, family = "binomial") #logistic regression
+>>>>>>> eda54b1c711d96f58428884ca4f13d54f46f5184
   #all_fit[[i]] <- fit
   #calculate acccuracy of classification
   Test$model_prob <- predict(fit, newdata=Test, type = "response")
