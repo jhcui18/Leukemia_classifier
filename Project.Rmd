@@ -10,6 +10,7 @@ output:
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 library(tidyverse)
+library(ggplot2)
 ```
 
 
@@ -101,11 +102,6 @@ abline(a = 0.9, b = 0, lty = 20)
 
 
 ```{r}
-k=6
-print(k)
-Xk <- as.matrix(X) %*% eigR$vectors[,c(1:6,8:10 )]
-fit1 <- glm(as.factor(Z) ~ Xk, family = "binomial")
-summary(fit1)
 
 #accuracy
 library(caret)
@@ -145,9 +141,9 @@ ggplot(data=tbl_accuracy, aes(x=k, y=accuracy)) +
   geom_line()
 ```
 
-```{r}
+```{r,warning=FALSE}
 #boostrap confidence interval
-Xk_boot <- as.matrix(scaled_X) %*% eig$vectors[, 1:2] #principal components
+Xk_boot <- as.matrix(scaled_X) %*% eig$vectors[, 1:3] #principal components
 data_boot <- as.data.frame(cbind(Xk_boot,Z_binary))
 # Containers for the coefficients
 sample_coef_intercept <- NULL
@@ -170,6 +166,9 @@ for (i in 1:1000) {
   
   sample_coef_x2 <-
     c(sample_coef_x2, model_bootstrap$coefficients[3])
+  
+  sample_coef_x3 <-
+    c(sample_coef_x2, model_bootstrap$coefficients[4])
 }
 
 a <-
@@ -182,23 +181,34 @@ b <-
 c <-
   cbind(quantile(sample_coef_x2, prob = 0.025),
         quantile(sample_coef_x2, prob = 0.975))
+d <-
+  cbind(quantile(sample_coef_x3, prob = 0.025),
+        quantile(sample_coef_x3, prob = 0.975))
 
-c <-
+Xk <- as.matrix(scaled_X) %*% eig$vectors[, 1:3] #principal components
+data <- as.data.frame(cbind(Xk,Z_binary))
+Train <- data[trainIndex,]
+Test <- data[-trainIndex,]
+fit <- glm(as.factor(Z_binary) ~ ., data=Train, family = "binomial") #logistic regression
+d <-
   round(cbind(
-    population = confint(population.model),
-    sample = confint(sample.model),
-    boot = rbind(a, b)), 4)
-colnames(c) <- c("2.5 %", "97.5 %",
-                 "2.5 %", "97.5 %",
+    sample = confint(fit),
+    boot = rbind(a,b,c,d)), 4)
+colnames(d) <- c("2.5 %", "97.5 %",
                  "2.5 %", "97.5 %")
 knitr::kable(rbind(
-  c('population',
-    'population',
-    'sample',
-    'sample',
+  c('regression',
+    'regression',
     'bootstrap',
-    'bootstrap'),c))
+    'bootstrap'),d))
 ```
+
+The second component has a 95% confidence interval that does not cross zero.
+
+```{r}
+
+```
+
 
 
 ```{r,include=FALSE}
