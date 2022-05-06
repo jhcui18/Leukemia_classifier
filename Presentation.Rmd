@@ -14,11 +14,26 @@ library(dplyr)
 
 ## Motivation
 
+- Inspired by the study published in 1999 by Golub _et al_
+    + A systematic approach to cancer classification based on global gene expression analysis using DNA microarrays. 
+    + They proposed “neighborhood analysis” to identify genes that are more highly correlated with the tumor class distinction
+- Example: Acute leukemias
+    + Two sub-types: acute lymphoblastic leukemia(ALL) and acute myeloid leukemia(AML)
+    + Important to distinguish ALL from AML for target treatment.
+    
+## Motivation
+
+- Why using gene expression data that may introduce more variation?
+    + The distinction between them has been well established in clinical practice by experienced hematopathologist. But misclassification may occur sometimes.
+    + 1) Develop a classification model based on the gene expression data 
+    + 2) Identify a small portion of gene with significantly different gene expression levels 
+    + 3) given a new sample of acute leukemia, researchers can perform gene sequencing on targeted gene we have identified and use the classification model as an assistance to the diagnosis of cancer sub-type
 
 ## Data
 
-- The dataset consists of quantitative expression levels of 7192 genes from 72 acute leukemia patients.
-- The patients are labeled with Acute myeloid leukemia(AML) and Acute lymphoblastic leukemia(ALL) from previous clinical diagnoses. 
+- The dataset consists of quantitative expression levels of $p=7192$ genes from $n=72$ acute leukemia patients.
+- Out of 72 patients, 47 have Acute lymphoblastic leukemia(ALL) and 25 have Acute myeloid leukemia(AML).
+
 
 ## PCA
 
