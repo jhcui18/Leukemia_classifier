@@ -12,6 +12,13 @@ library(ggplot2)
 library(dplyr)
 ```
 
+## Content
+- Motivation
+- Data
+- PCA approach
+- Results
+
+
 ## Motivation
 
 - Inspired by the study published in 1999 by Golub _et al_
