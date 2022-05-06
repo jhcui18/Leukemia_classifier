@@ -6,7 +6,10 @@ output: beamer_presentation
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = FALSE)
+knitr::opts_chunk$set(echo = FALSE,warning=FALSE,message = FALSE)
+library(tidyverse)
+library(ggplot2)
+library(dplyr)
 ```
 
 ## Motivation
@@ -17,21 +20,212 @@ knitr::opts_chunk$set(echo = FALSE)
 - The dataset consists of quantitative expression levels of 7192 genes from 72 acute leukemia patients.
 - The patients are labeled with Acute myeloid leukemia(AML) and Acute lymphoblastic leukemia(ALL) from previous clinical diagnoses. 
 
-## Slide with Bullets
+## PCA
 
-- Bullet 1
-- Bullet 2
-- Bullet 3
+Since this is a problem of "$p>>n$", dimension reduction should be done before we implement a logistic regression model.
 
-## Slide with R Output
+- First we standardized the gene expression level as their ranges vary a lot.
+- Then we calculated the covariance matrix, eigen vectors, and cumulative variance as learned in class. 
 
-```{r cars, echo = TRUE}
-summary(cars)
+## Cumulative Variance 
+
+From the cumulative variance and scree plot, we found 70 components can explain 99% of the covariance. 
+
+```{r pca}
+#data cleaning 
+rm(list = ls())
+df1 <- read.csv("data_set_ALL_AML_train.csv")
+df2 <- read.csv("data_set_ALL_AML_independent.csv")
+label <- read.csv("actual.csv")
+df <- cbind(df1,df2)
+# extract patients columns
+col_extract <- character(0)
+for(i in 1:ncol(df)) {
+  if(length(grep("X",colnames(df)[i]))>0) col_extract <- append(col_extract, colnames(df)[i])
+}
+df <- df[,col_extract]
+rownames(df) <- df1[,2]
+gene_name <- df1[,1]
+df <- t(df)
+n <- nrow(df)
+p <- ncol(df)
+
+# extract patient ID from row names and sort data by ID
+ID <- numeric(n)
+for(i in 1:n) ID[i] <- as.numeric(gsub("X","",rownames(df)[i]))
+df <- data.frame(cbind(ID, df))
+df <- df %>% arrange(ID)
+X <- df[,-1]
+Z <- label$cancer
+
+scaled_X <- scale(X)
+S <- readRDS("cov_matrix.rds")
+eig <- readRDS("eigen.rds")
+cum_prop <- cumsum(eig$values/sum(eig$values))
+plot(1:p, cum_prop, type = "l", pch = 19,
+     xlab = "i", ylab = "cumulative proportion of variance", main = "") 
+abline(a = 0.9, b = 0, lty = 20)
+
 ```
 
-## Slide with Plot
+## Scree Plot
+```{r}
+# scree plot
+plot(1:40, eig$values[1:40], type = "b", pch = 19,
+     xlab = "i", ylab = expression(hat(lambda)), main = "Scree plot") 
 
-```{r pressure}
-plot(pressure)
 ```
 
+## Scree Plot
+
+But, of course, we cannot include all of the 70 components to the data as our sample size is only 72. Including all of them will cause overfit. 
+
+Due to the limitation of computing power, we decided to run logistic regression for 1 to 10 component. 10 component can explain approximate 50% of the variance.
+
+The data is splited into train and test dataset at a ratio of 1:2. The accuracy of classification in the test dataset is calculated.
+
+## Accuracy Plot
+
+```{r accuracy, include=FALSE}
+#accuracy
+library(caret)
+set.seed(1234)
+#split 2/3 data to train and 1/3 to test
+trainIndex <- createDataPartition(Z, p=0.67,
+                                  list = FALSE,
+                                  times =1)
+Z_binary <- ifelse(Z=="ALL",1,0)
+#run logistic regression from 1 to 10 components
+k_seq <- 1:10
+all_fit <- list()
+tbl_accuracy <- data.frame(k = rep(NA_real_,length(k_seq)),
+                           accuracy = NA_real_)
+                       
+for(i in 1:length(k_seq)) {
+  k <- k_seq[i]
+  print(k)
+  tbl_accuracy$k[i] <- k
+  Xk <- as.matrix(scaled_X) %*% eig$vectors[, 1:k] #principal components
+  data <- as.data.frame(cbind(Xk,Z_binary))
+  Train <- data[trainIndex,]
+  Test <- data[-trainIndex,]
+  fit <- glm(as.factor(Z_binary) ~ ., data=Train, family = "binomial") #logistic regression
+  #all_fit[[i]] <- fit
+  #calculate acccuracy of classification
+  Test$model_prob <- predict(fit, newdata=Test, type = "response")
+  Test <- Test  %>% mutate(model_pred = 1*(model_prob > .5) + 0)
+  Test <- Test %>% mutate(accurate = 1*(model_pred == Z_binary))
+  tbl_accuracy$accuracy[i] <- sum(Test$accurate)/nrow(Test) 
+}
+
+```
+
+```{r}
+#plot accuracy with number of components
+ggplot(data=tbl_accuracy, aes(x=k, y=accuracy)) +
+  geom_point() +
+  geom_line() +
+  labs(x="# of principal components")
+```
+
+## Accuracy
+
+
+We think this unstable results may be caused by the small sample size because when we include more than 5 components to the model, the model can not converge.
+
+## Bootstrap 
+
+We chosed the model with three principal components as the 3-component model can converge and has an accuracy of 86%. This model should have a good balance between bias and variance. We want to run a bootstrap for this model and check whether the regression 95% confidence interval and the bootstrap 95% confidence interval agrees.
+
+## Bootstrap Results
+
+```{r}
+#boostrap confidence interval
+Xk_boot <- as.matrix(scaled_X) %*% eig$vectors[, 1:3] #principal components
+data_boot <- as.data.frame(cbind(Xk_boot,Z_binary))
+# Containers for the coefficients
+sample_coef_intercept <- NULL
+sample_coef_x1 <- NULL
+sample_coef_x2 <- NULL
+
+for (i in 1:1000) {
+  #Creating a resampled dataset from the sample data
+  sample_d = data_boot[sample(1:nrow(data_boot), nrow(data_boot), replace = TRUE), ]
+  
+  #Running the regression on these data
+  model_bootstrap <- glm(as.factor(Z_binary) ~ ., data=sample_d, family = "binomial") #logistic regression
+  
+  #Saving the coefficients
+  sample_coef_intercept <-
+    c(sample_coef_intercept, model_bootstrap$coefficients[1])
+  
+  sample_coef_x1 <-
+    c(sample_coef_x1, model_bootstrap$coefficients[2])
+  
+  sample_coef_x2 <-
+    c(sample_coef_x2, model_bootstrap$coefficients[3])
+  
+  sample_coef_x3 <-
+    c(sample_coef_x2, model_bootstrap$coefficients[4])
+}
+
+a <-
+  cbind(
+    quantile(sample_coef_intercept, prob = 0.025),
+    quantile(sample_coef_intercept, prob = 0.975))
+b <-
+  cbind(quantile(sample_coef_x1, prob = 0.025),
+        quantile(sample_coef_x1, prob = 0.975))
+c <-
+  cbind(quantile(sample_coef_x2, prob = 0.025),
+        quantile(sample_coef_x2, prob = 0.975))
+d <-
+  cbind(quantile(sample_coef_x3, prob = 0.025),
+        quantile(sample_coef_x3, prob = 0.975))
+
+Xk <- as.matrix(scaled_X) %*% eig$vectors[, 1:3] #principal components
+data <- as.data.frame(cbind(Xk,Z_binary))
+Train <- data[trainIndex,]
+Test <- data[-trainIndex,]
+fit <- glm(as.factor(Z_binary) ~ ., data=Train, family = "binomial") #logistic regression
+d <-
+  round(cbind(
+    sample = confint(fit),
+    boot = rbind(a,b,c,d)), 4)
+colnames(d) <- c("2.5 %", "97.5 %",
+                 "2.5 %", "97.5 %")
+knitr::kable(rbind(
+  c('regression',
+    'regression',
+    'bootstrap',
+    'bootstrap'),d))
+```
+
+## Bootstrap result
+
+Both the regression and boostrap confidence intervals agree that the first component is not significant and the second component is significantly negatively correlated with the outcome. While for the third component, the regression confidence interval shows it is positively correlated but the bootstrap confidence interval show it is negatively correlated. So we will further explore the second component.
+
+We want to look into it's marginal correlations to determine which gene expression contributes most to this component by calculating the marginal correlations.
+
+## Heatmap of gene expression level
+```{r heatmap}
+# Marginal correlations:
+marg_cor <- eig$vectors[,2]*sqrt(eig$values[2])
+marg_cor <-  data.frame(marg_cor)
+marg_cor <- marg_cor %>%
+  mutate(abs_cor = abs(marg_cor), name = gene_name) 
+
+library(RColorBrewer)
+gene_id <- order(marg_cor$abs_cor, decreasing = T)[1:50]
+patient_id <- order(label$cancer)
+X1 <- scaled_X[patient_id, gene_id]
+colnames(X1) <- gene_name[gene_id]
+heatmap(t(X1),
+        Rowv=NA, Colv=NA, col=rev(brewer.pal(9,"RdBu")))
+```
+
+## Reference
+
+Golub, T. R., et al. “Molecular Classification of Cancer: Class Discovery and Class Prediction by Gene Expression Monitoring.” Science, vol. 286, no. 5439, 1999, pp. 531–37, http://www.jstor.org/stable/2899325. Accessed 1 May 2022.
+
+Codes and lecture notes from UMass Amherst Spring 2022 STAT 697MV course by Professor Shai Gorsky.
