@@ -229,6 +229,12 @@ Both the regression and boostrap confidence intervals agree that the first compo
 
 We want to look into it's marginal correlations to determine which gene expression contributes most to this component by calculating the marginal correlations.
 
+## Marginal correlation
+
+We picked the 50 genes that contributes the most to the second component and draw a heatmap to see how thoes genes' expression levels are related to the outcome.
+
+The left side of the heatmap are patients who are diagnosed with Acute myeloid leukemia(AML), and the right side are patients who are diagnosed with Acute lymphoblastic leukemia(ALL). We can see that most of the genes are much more down-regulated for ALL patients than for AML patients.
+
 ## Heatmap of gene expression level
 ```{r heatmap}
 # Marginal correlations:
