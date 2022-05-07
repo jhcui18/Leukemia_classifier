@@ -226,7 +226,7 @@ marg_cor <- marg_cor %>%
   mutate(abs_cor = abs(marg_cor), name = gene_name) 
 ```
 
-We picked the 50 genes that contributes the most to the second component and draw a heatmap to see how thoes genes' expression levels are related to the outcome. ]
+We picked the 50 genes that contributes the most to the second component and draw a heatmap to see how thoes genes' expression levels are related to the outcome.
 
 The left side of the heatmap are patients who are diagnosed with Acute myeloid leukemia(AML), and the right side are patients who are diagnosed with Acute lymphoblastic leukemia(ALL). We can see that most of the genes are much more down-regulated for ALL patients than for AML patients.
 
